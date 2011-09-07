@@ -1,0 +1,4 @@
+b43-firmware-install is bash script that automates installation
+of proprietary firmware required by b43 Linux driver.
+
+It requires b43-fwcutter. 

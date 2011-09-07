@@ -1,0 +1,86 @@
+#!/bin/bash
+
+############################################################################
+# This script downloads broadcom-wl archive and extracts firmware from it.
+#
+#    Copyright (C) 2011  Dmitry Mikhirev
+#
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+############################################################################
+
+MIN_FWCUTTER_VER=015
+
+if ! which b43-fwcutter > /dev/null || [ `b43-fwcutter -v | cut -d\  -f3` -lt $MIN_FWCUTTER_VER ]
+then
+    echo "You need b43-fwcutter $MIN_FWCUTTER_VER or later to install firmware"
+    exit 1
+fi
+
+KERNEL_VERSION_P=`uname -r | cut -d. -f1`
+KERNEL_VERSION_S=`uname -r | cut -d. -f2`
+if [ $KERNEL_VERSION_P -gt 3 ] || ( [ $KERNEL_VERSION_P -eq 3 ] && [ $KERNEL_VERSION_S -ge 2 ] )
+then
+#   kernel version >= 3.2
+    WL_VER='5.100.138'
+    BASEURL='http://www.lwfinger.com/b43-firmware/'
+    SHA512='02487e76e3eca7fe97ce2ad7dc9c5d39fac82b8d5f7786cce047f9c85e2426f5b7ea085d84c7d4aae43e0fe348d603e3229211bab601726794ef633441d37a8b'
+    OFILE='linux/wl_apsta.o'
+else
+#   kernel version < 3.2
+    WL_VER='5.10.56.27.3'
+    SUFFIX='_mipsel'
+    BASEURL='http://mirror2.openwrt.org/sources/'
+    SHA512='ee3384e4c4fb5dfa912adfeb8a5bbdd449cc51984e46e1f08f9ae2637e83e80ed549e0e9eaede65289be734bfb590d574fd17c4c0a73e51ac2a386e8bcfaf893'
+    OFILE='driver/wl_apsta/wl_prebuilt.o'
+fi
+
+NAME="broadcom-wl-$WL_VER"
+ARCHIVE="${NAME}${SUFFIX}.tar.bz2"
+
+[ $TMPDIR ] || TMPDIR='/tmp/'
+TEMP=`mktemp -q -d ${TMPDIR}b43-firmware-temp_XXXX`
+cd $TEMP
+
+printf 'Downloading proprietary driver... '
+wget -q ${BASEURL}${ARCHIVE}
+if [ $? -ne 0 ]
+then
+    echo "Can not download file ${BASEURL}${ARCHIVE}"
+    rm -rf $TEMP
+    exit 2
+fi
+
+echo "$SHA512  $ARCHIVE" | sha512sum -c --status
+if [ $? -eq 0 ]
+then
+    echo 'Done'
+else
+    echo 'Archive checksum wrong'
+    rm -rf $TEMP
+    exit 3
+fi
+
+printf 'Extracting firmware... '
+tar -xf $ARCHIVE $NAME/$OFILE
+b43-fwcutter -w /lib/firmware $NAME/$OFILE > /dev/null
+if [ $? -eq 0 ]
+then
+    echo 'Done'
+else
+    echo 'b43-fwcutter can not extract firmware'
+    rm -rf $TEMP
+    exit 4
+fi
+
+rm -rf $TEMP
